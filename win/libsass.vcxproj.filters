@@ -34,9 +34,6 @@
     <ClInclude Include="$(LIBSASS_INCLUDES_DIR)\sass\functions.h">
       <Filter>Include Headers</Filter>
     </ClInclude>
-    <ClInclude Include="$(LIBSASS_INCLUDES_DIR)\sass\interface.h">
-      <Filter>Include Headers</Filter>
-    </ClInclude>
     <ClInclude Include="$(LIBSASS_INCLUDES_DIR)\sass\values.h">
       <Filter>Include Headers</Filter>
     </ClInclude>
@@ -67,6 +64,9 @@
       <Filter>Headers</Filter>
     </ClInclude>
     <ClInclude Include="$(LIBSASS_HEADERS_DIR)\bind.hpp">
+      <Filter>Headers</Filter>
+    </ClInclude>
+    <ClInclude Include="$(LIBSASS_HEADERS_DIR)\check_nesting.hpp">
       <Filter>Headers</Filter>
     </ClInclude>
     <ClInclude Include="$(LIBSASS_HEADERS_DIR)\color_maps.hpp">
@@ -227,6 +227,9 @@
     <ClCompile Include="$(LIBSASS_SRC_DIR)\cencode.c">
       <Filter>Sources</Filter>
     </ClCompile>
+    <ClCompile Include="$(LIBSASS_SRC_DIR)\check_nesting.cpp">
+      <Filter>Sources</Filter>
+    </ClCompile>
     <ClCompile Include="$(LIBSASS_SRC_DIR)\color_maps.cpp">
       <Filter>Sources</Filter>
     </ClCompile>
@@ -300,9 +303,6 @@
       <Filter>Sources</Filter>
     </ClCompile>
     <ClCompile Include="$(LIBSASS_SRC_DIR)\sass.cpp">
-      <Filter>Sources</Filter>
-    </ClCompile>
-    <ClCompile Include="$(LIBSASS_SRC_DIR)\sass_interface.cpp">
       <Filter>Sources</Filter>
     </ClCompile>
     <ClCompile Include="$(LIBSASS_SRC_DIR)\sass_context.cpp">

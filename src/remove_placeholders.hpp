@@ -17,8 +17,8 @@ namespace Sass {
 
         void fallback_impl(AST_Node* n) {}
 
-    private:
-      Selector_List* remove_placeholders(Selector_List*);
+    public:
+      CommaSequence_Selector* remove_placeholders(CommaSequence_Selector*);
 
     public:
         Remove_Placeholders(Context&);
@@ -27,7 +27,8 @@ namespace Sass {
         void operator()(Block*);
         void operator()(Ruleset*);
         void operator()(Media_Block*);
-        void operator()(At_Rule*);
+        void operator()(Supports_Block*);
+        void operator()(Directive*);
 
         template <typename U>
         void fallback(U x) { return fallback_impl(x); }

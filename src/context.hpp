@@ -50,7 +50,7 @@ namespace Sass {
     std::vector<char*> strings;
     std::vector<Resource> resources;
     std::map<const std::string, const StyleSheet> sheets;
-    Subset_Map<std::string, std::pair<Complex_Selector*, Compound_Selector*> > subset_map;
+    Subset_Map<std::string, std::pair<Sequence_Selector*, SimpleSequence_Selector*> > subset_map;
     std::vector<Sass_Import_Entry> import_stack;
 
     struct Sass_Compiler* c_compiler;
@@ -101,9 +101,9 @@ namespace Sass {
 
   private:
     void collect_plugin_paths(const char* paths_str);
-    void collect_plugin_paths(const char** paths_array);
+    void collect_plugin_paths(string_list* paths_array);
     void collect_include_paths(const char* paths_str);
-    void collect_include_paths(const char** paths_array);
+    void collect_include_paths(string_list* paths_array);
     std::string format_embedded_source_map();
     std::string format_source_mapping_url(const std::string& out_path);
 

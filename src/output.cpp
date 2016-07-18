@@ -118,7 +118,9 @@ namespace Sass {
       for (size_t i = 0, L = b->length(); i < L; ++i) {
         Statement* stm = (*b)[i];
         if (dynamic_cast<Has_Block*>(stm)) {
-          stm->perform(this);
+          if (typeid(*stm) != typeid(Declaration)) {
+            stm->perform(this);
+          }
         }
       }
       return;
@@ -310,7 +312,7 @@ namespace Sass {
     append_scope_closer();
   }
 
-  void Output::operator()(At_Rule* a)
+  void Output::operator()(Directive* a)
   {
     std::string      kwd   = a->keyword();
     Selector*   s     = a->selector();

@@ -51,13 +51,6 @@ namespace Sass {
     if (rule->block()) rule->block()->perform(this);
   }
 
-  void Inspect::operator()(Propset* propset)
-  {
-    propset->property_fragment()->perform(this);
-    append_colon_separator();
-    propset->block()->perform(this);
-  }
-
   void Inspect::operator()(Bubble* bubble)
   {
     append_indentation();
@@ -96,7 +89,7 @@ namespace Sass {
     at_root_block->block()->perform(this);
   }
 
-  void Inspect::operator()(At_Rule* at_rule)
+  void Inspect::operator()(Directive* at_rule)
   {
     append_indentation();
     append_token(at_rule->keyword(), at_rule);
@@ -166,10 +159,6 @@ namespace Sass {
       append_token("@import", import);
       append_mandatory_space();
 
-      if (String_Quoted* strq = dynamic_cast<String_Quoted*>(import->urls().front())) {
-        strq->is_delayed(false);
-      }
-
       import->urls().front()->perform(this);
       if (import->urls().size() == 1) {
         if (import->media_queries()) {
@@ -182,10 +171,6 @@ namespace Sass {
         append_mandatory_linefeed();
         append_token("@import", import);
         append_mandatory_space();
-
-        if (String_Quoted* strq = dynamic_cast<String_Quoted*>(import->urls()[i])) {
-          strq->is_delayed(false);
-        }
 
         import->urls()[i]->perform(this);
         if (import->urls().size() - 1 == i) {
@@ -385,9 +370,12 @@ namespace Sass {
     bool was_space_array = in_space_array;
     bool was_comma_array = in_comma_array;
     // probably ruby sass eqivalent of element_needs_parens
-    if (output_style() == TO_SASS && list->length() == 1 &&
-      (!dynamic_cast<List*>((*list)[0]) &&
-       !dynamic_cast<Selector_List*>((*list)[0]))) {
+    if (output_style() == TO_SASS &&
+        list->length() == 1 &&
+        !list->from_selector() &&
+        !dynamic_cast<List*>((*list)[0]) &&
+        !dynamic_cast<List*>((*list)[0]) &&
+        !dynamic_cast<CommaSequence_Selector*>((*list)[0])) {
       append_string("(");
     }
     else if (!in_declaration && (list->separator() == SASS_HASH ||
@@ -406,7 +394,10 @@ namespace Sass {
       Expression* list_item = (*list)[i];
       if (output_style() != TO_SASS) {
         if (list_item->is_invisible()) {
-          continue;
+          // this fixes an issue with "" in a list
+          if (!dynamic_cast<String_Constant*>(list_item)) {
+            continue;
+          }
         }
       }
       if (items_output) {
@@ -421,9 +412,12 @@ namespace Sass {
     in_comma_array = was_comma_array;
     in_space_array = was_space_array;
     // probably ruby sass eqivalent of element_needs_parens
-    if (output_style() == TO_SASS && list->length() == 1 &&
-      (!dynamic_cast<List*>((*list)[0]) &&
-       !dynamic_cast<Selector_List*>((*list)[0]))) {
+    if (output_style() == TO_SASS &&
+        list->length() == 1 &&
+        !list->from_selector() &&
+        !dynamic_cast<List*>((*list)[0]) &&
+        !dynamic_cast<List*>((*list)[0]) &&
+        !dynamic_cast<CommaSequence_Selector*>((*list)[0])) {
       append_string(",)");
     }
     else if (!in_declaration && (list->separator() == SASS_HASH ||
@@ -442,10 +436,8 @@ namespace Sass {
          (output_style() == INSPECT) || (
           expr->op().ws_before
           && (!expr->is_interpolant())
-          && (!expr->is_delayed() ||
-          expr->is_left_interpolant() ||
-          expr->is_right_interpolant()
-          )
+          && (expr->is_left_interpolant() ||
+              expr->is_right_interpolant())
 
     )) append_string(" ");
     switch (expr->type()) {
@@ -468,10 +460,8 @@ namespace Sass {
          (output_style() == INSPECT) || (
           expr->op().ws_after
           && (!expr->is_interpolant())
-          && (!expr->is_delayed()
-              || expr->is_left_interpolant()
-              || expr->is_right_interpolant()
-          )
+          && (expr->is_left_interpolant() ||
+              expr->is_right_interpolant())
     )) append_string(" ");
     expr->right()->perform(this);
   }
@@ -803,20 +793,15 @@ namespace Sass {
     }
   }
 
-  void Inspect::operator()(At_Root_Expression* ae)
+  void Inspect::operator()(At_Root_Query* ae)
   {
-    if (ae->is_interpolated()) {
-      ae->feature()->perform(this);
+    append_string("(");
+    ae->feature()->perform(this);
+    if (ae->value()) {
+      append_colon_separator();
+      ae->value()->perform(this);
     }
-    else {
-      append_string("(");
-      ae->feature()->perform(this);
-      if (ae->value()) {
-        append_colon_separator();
-        ae->value()->perform(this);
-      }
-      append_string(")");
-    }
+    append_string(")");
   }
 
   void Inspect::operator()(Null* n)
@@ -894,7 +879,7 @@ namespace Sass {
     append_string("&");
   }
 
-  void Inspect::operator()(Selector_Placeholder* s)
+  void Inspect::operator()(Placeholder_Selector* s)
   {
     append_token(s->name(), s);
     if (s->has_line_break()) append_optional_linefeed();
@@ -902,12 +887,19 @@ namespace Sass {
 
   }
 
-  void Inspect::operator()(Type_Selector* s)
+  void Inspect::operator()(Element_Selector* s)
   {
     append_token(s->ns_name(), s);
   }
 
-  void Inspect::operator()(Selector_Qualifier* s)
+  void Inspect::operator()(Class_Selector* s)
+  {
+    append_token(s->ns_name(), s);
+    if (s->has_line_break()) append_optional_linefeed();
+    if (s->has_line_break()) append_indentation();
+  }
+
+  void Inspect::operator()(Id_Selector* s)
   {
     append_token(s->ns_name(), s);
     if (s->has_line_break()) append_optional_linefeed();
@@ -953,7 +945,7 @@ namespace Sass {
     in_wrapped = was;
   }
 
-  void Inspect::operator()(Compound_Selector* s)
+  void Inspect::operator()(SimpleSequence_Selector* s)
   {
     for (size_t i = 0, L = s->length(); i < L; ++i) {
       (*s)[i]->perform(this);
@@ -965,11 +957,16 @@ namespace Sass {
     }
   }
 
-  void Inspect::operator()(Complex_Selector* c)
+  void Inspect::operator()(Sequence_Selector* c)
   {
-    Compound_Selector*           head = c->head();
-    Complex_Selector*            tail = c->tail();
-    Complex_Selector::Combinator comb = c->combinator();
+    SimpleSequence_Selector*      head = c->head();
+    Sequence_Selector*            tail = c->tail();
+    Sequence_Selector::Combinator comb = c->combinator();
+
+    if (comb == Sequence_Selector::ANCESTOR_OF && (!head || head->empty())) {
+      if (tail) tail->perform(this);
+      return;
+    }
 
     if (c->has_line_feed()) {
       if (!(c->has_parent_ref())) {
@@ -981,30 +978,30 @@ namespace Sass {
     if (head && head->length() != 0) head->perform(this);
     bool is_empty = !head || head->length() == 0 || head->is_empty_reference();
     bool is_tail = head && !head->is_empty_reference() && tail;
-    if (output_style() == COMPRESSED && comb != Complex_Selector::ANCESTOR_OF) scheduled_space = 0;
+    if (output_style() == COMPRESSED && comb != Sequence_Selector::ANCESTOR_OF) scheduled_space = 0;
 
     switch (comb) {
-      case Complex_Selector::ANCESTOR_OF:
+      case Sequence_Selector::ANCESTOR_OF:
         if (is_tail) append_mandatory_space();
       break;
-      case Complex_Selector::PARENT_OF:
+      case Sequence_Selector::PARENT_OF:
         append_optional_space();
         append_string(">");
         append_optional_space();
       break;
-      case Complex_Selector::ADJACENT_TO:
+      case Sequence_Selector::ADJACENT_TO:
         append_optional_space();
         append_string("+");
         append_optional_space();
       break;
-      case Complex_Selector::REFERENCE:
+      case Sequence_Selector::REFERENCE:
         append_mandatory_space();
         append_string("/");
         c->reference()->perform(this);
         append_string("/");
         append_mandatory_space();
       break;
-      case Complex_Selector::PRECEDES:
+      case Sequence_Selector::PRECEDES:
         if (is_empty) append_optional_space();
         else append_mandatory_space();
         append_string("~");
@@ -1012,7 +1009,7 @@ namespace Sass {
         else append_optional_space();
       break;
     }
-    if (tail && comb != Complex_Selector::ANCESTOR_OF) {
+    if (tail && comb != Sequence_Selector::ANCESTOR_OF) {
       if (c->has_line_break()) append_optional_linefeed();
     }
     if (tail) tail->perform(this);
@@ -1023,7 +1020,7 @@ namespace Sass {
     }
   }
 
-  void Inspect::operator()(Selector_List* g)
+  void Inspect::operator()(CommaSequence_Selector* g)
   {
 
     if (g->empty()) {
@@ -1038,7 +1035,7 @@ namespace Sass {
     // probably ruby sass eqivalent of element_needs_parens
     if (output_style() == TO_SASS && g->length() == 1 &&
       (!dynamic_cast<List*>((*g)[0]) &&
-       !dynamic_cast<Selector_List*>((*g)[0]))) {
+       !dynamic_cast<CommaSequence_Selector*>((*g)[0]))) {
       append_string("(");
     }
     else if (!in_declaration && in_comma_array) {
@@ -1064,7 +1061,7 @@ namespace Sass {
     // probably ruby sass eqivalent of element_needs_parens
     if (output_style() == TO_SASS && g->length() == 1 &&
       (!dynamic_cast<List*>((*g)[0]) &&
-       !dynamic_cast<Selector_List*>((*g)[0]))) {
+       !dynamic_cast<CommaSequence_Selector*>((*g)[0]))) {
       append_string(",)");
     }
     else if (!in_declaration && in_comma_array) {

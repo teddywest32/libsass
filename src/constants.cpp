@@ -10,12 +10,13 @@ namespace Sass {
     // https://developer.mozilla.org/en-US/docs/Web/CSS/Specificity
     // https://github.com/sass/sass/issues/1495#issuecomment-61189114
     extern const unsigned long Specificity_Star = 0;
-    extern const unsigned long Specificity_Universal = 1 << 0;
-    extern const unsigned long Specificity_Type = 1 << 8;
-    extern const unsigned long Specificity_Class = 1 << 16;
-    extern const unsigned long Specificity_Attr = 1 << 16;
-    extern const unsigned long Specificity_Pseudo = 1 << 16;
-    extern const unsigned long Specificity_ID = 1 << 24;
+    extern const unsigned long Specificity_Universal = 0;
+    extern const unsigned long Specificity_Element = 1;
+    extern const unsigned long Specificity_Base = 1000;
+    extern const unsigned long Specificity_Class = 1000;
+    extern const unsigned long Specificity_Attr = 1000;
+    extern const unsigned long Specificity_Pseudo = 1000;
+    extern const unsigned long Specificity_ID = 1000000;
 
     // sass keywords
     extern const char at_root_kwd[]       = "@at-root";
@@ -88,10 +89,8 @@ namespace Sass {
     extern const char progid_kwd[]       = "progid";
     extern const char expression_kwd[]   = "expression";
     extern const char calc_fn_kwd[]      = "calc";
-    extern const char calc_kwd[]         = "calc(";
-    extern const char moz_calc_kwd[]     = "-moz-calc(";
-    extern const char webkit_calc_kwd[]  = "-webkit-calc(";
-    extern const char ms_calc_kwd[]      = "-ms-calc(";
+
+    extern const char almost_any_value_class[] = "\"'#!;{}";
 
     // css selector keywords
     extern const char sel_deep_kwd[] = "/deep/";

@@ -12,8 +12,12 @@
 
 namespace Sass {
 
+  #define out_of_memory() do {            \
+      std::cerr << "Out of memory.\n";    \
+      exit(EXIT_FAILURE);                 \
+    } while (0)
+
   double round(double val, size_t precision = 0);
-  char* sass_strdup(const char* str);
   double sass_atof(const char* str);
   const char* safe_str(const char *, const char* = "");
   void free_string_array(char **);
@@ -22,6 +26,7 @@ namespace Sass {
   std::string evacuate_escapes(const std::string& str);
   std::string string_to_output(const std::string& str);
   std::string comment_to_string(const std::string& text);
+  void newline_to_space(std::string& str);
 
   std::string quote(const std::string&, char q = 0);
   std::string unquote(const std::string&, char* q = 0, bool keep_utf8_sequences = false);
@@ -46,6 +51,7 @@ namespace Sass {
     bool isPrintable(Ruleset* r, Sass_Output_Style style = NESTED);
     bool isPrintable(Supports_Block* r, Sass_Output_Style style = NESTED);
     bool isPrintable(Media_Block* r, Sass_Output_Style style = NESTED);
+    bool isPrintable(Comment* b, Sass_Output_Style style = NESTED);
     bool isPrintable(Block* b, Sass_Output_Style style = NESTED);
     bool isPrintable(String_Constant* s, Sass_Output_Style style = NESTED);
     bool isPrintable(String_Quoted* s, Sass_Output_Style style = NESTED);

@@ -155,7 +155,7 @@ namespace Sass {
     T* get_arg_sel(const std::string& argname, Env& env, Signature sig, ParserState pstate, Backtrace* backtrace, Context& ctx);
 
     template <>
-    Selector_List* get_arg_sel(const std::string& argname, Env& env, Signature sig, ParserState pstate, Backtrace* backtrace, Context& ctx) {
+    CommaSequence_Selector* get_arg_sel(const std::string& argname, Env& env, Signature sig, ParserState pstate, Backtrace* backtrace, Context& ctx) {
       Expression* exp = ARG(argname, Expression);
       if (exp->concrete_type() == Expression::NULL_VAL) {
         std::stringstream msg;
@@ -171,7 +171,7 @@ namespace Sass {
     }
 
     template <>
-    Complex_Selector* get_arg_sel(const std::string& argname, Env& env, Signature sig, ParserState pstate, Backtrace* backtrace, Context& ctx) {
+    Sequence_Selector* get_arg_sel(const std::string& argname, Env& env, Signature sig, ParserState pstate, Backtrace* backtrace, Context& ctx) {
       Expression* exp = ARG(argname, Expression);
       if (exp->concrete_type() == Expression::NULL_VAL) {
         std::stringstream msg;
@@ -183,12 +183,12 @@ namespace Sass {
         str->quote_mark(0);
       }
       std::string exp_src = exp->to_string(ctx.c_options) + "{";
-      Selector_List* sel_list = Parser::parse_selector(exp_src.c_str(), ctx);
+      CommaSequence_Selector* sel_list = Parser::parse_selector(exp_src.c_str(), ctx);
       return (sel_list->length() > 0) ? sel_list->first() : 0;
     }
 
     template <>
-    Compound_Selector* get_arg_sel(const std::string& argname, Env& env, Signature sig, ParserState pstate, Backtrace* backtrace, Context& ctx) {
+    SimpleSequence_Selector* get_arg_sel(const std::string& argname, Env& env, Signature sig, ParserState pstate, Backtrace* backtrace, Context& ctx) {
       Expression* exp = ARG(argname, Expression);
       if (exp->concrete_type() == Expression::NULL_VAL) {
         std::stringstream msg;
@@ -199,7 +199,7 @@ namespace Sass {
         str->quote_mark(0);
       }
       std::string exp_src = exp->to_string(ctx.c_options) + "{";
-      Selector_List* sel_list = Parser::parse_selector(exp_src.c_str(), ctx);
+      CommaSequence_Selector* sel_list = Parser::parse_selector(exp_src.c_str(), ctx);
       return (sel_list->length() > 0) ? sel_list->first()->tail()->head() : 0;
     }
 
@@ -819,7 +819,7 @@ namespace Sass {
       }
       if (hsl) {
         HSL hsl_struct = rgb_to_hsl(color->r(), color->g(), color->b());
-        if (h) hsl_struct.h = static_cast<double>(((static_cast<int>(h->value()) % 360) + 360) % 360) / 360.0;
+        if (h) hsl_struct.h = std::fmod(h->value(), 360.0);
         if (s) hsl_struct.s = ARGR("$saturation", Number, 0, 100)->value();
         if (l) hsl_struct.l = ARGR("$lightness",  Number, 0, 100)->value();
         double alpha = a ? ARGR("$alpha", Number, 0, 1.0)->value() : color->a();
@@ -880,7 +880,7 @@ namespace Sass {
       if (String_Quoted* string_quoted = dynamic_cast<String_Quoted*>(arg)) {
         String_Constant* result = SASS_MEMORY_NEW(ctx.mem, String_Constant, pstate, string_quoted->value());
         // remember if the string was quoted (color tokens)
-        result->sass_fix_1291(string_quoted->quote_mark() != 0);
+        result->is_delayed(true); // delay colors
         return result;
       }
       else if (dynamic_cast<String_Constant*>(arg)) {
@@ -902,9 +902,15 @@ namespace Sass {
     BUILT_IN(sass_quote)
     {
       AST_Node* arg = env["$string"];
+      // only set quote mark to true if already a string
+      if (String_Quoted* qstr = dynamic_cast<String_Quoted*>(arg)) {
+        qstr->quote_mark('*');
+        return qstr;
+      }
+      // all other nodes must be converted to a string node
       std::string str(quote(arg->to_string(ctx.c_options), String_Constant::double_quote()));
       String_Quoted* result = SASS_MEMORY_NEW(ctx.mem, String_Quoted, pstate, str);
-      result->is_delayed(true);
+      result->quote_mark('*');
       return result;
     }
 
@@ -1205,7 +1211,7 @@ namespace Sass {
     Signature length_sig = "length($list)";
     BUILT_IN(length)
     {
-      if (Selector_List* sl = dynamic_cast<Selector_List*>(env["$list"])) {
+      if (CommaSequence_Selector* sl = dynamic_cast<CommaSequence_Selector*>(env["$list"])) {
         return SASS_MEMORY_NEW(ctx.mem, Number, pstate, (double)sl->length());
       }
       Expression* v = ARG("$list", Expression);
@@ -1214,9 +1220,9 @@ namespace Sass {
         return SASS_MEMORY_NEW(ctx.mem, Number, pstate, (double)(map ? map->length() : 1));
       }
       if (v->concrete_type() == Expression::SELECTOR) {
-        if (Compound_Selector* h = dynamic_cast<Compound_Selector*>(v)) {
+        if (SimpleSequence_Selector* h = dynamic_cast<SimpleSequence_Selector*>(v)) {
           return SASS_MEMORY_NEW(ctx.mem, Number, pstate, (double)h->length());
-        } else if (Selector_List* ls = dynamic_cast<Selector_List*>(v)) {
+        } else if (CommaSequence_Selector* ls = dynamic_cast<CommaSequence_Selector*>(v)) {
           return SASS_MEMORY_NEW(ctx.mem, Number, pstate, (double)ls->length());
         } else {
           return SASS_MEMORY_NEW(ctx.mem, Number, pstate, 1);
@@ -1234,7 +1240,7 @@ namespace Sass {
     {
       Number* n = ARG("$n", Number);
       Map* m = dynamic_cast<Map*>(env["$list"]);
-      if (Selector_List* sl = dynamic_cast<Selector_List*>(env["$list"])) {
+      if (CommaSequence_Selector* sl = dynamic_cast<CommaSequence_Selector*>(env["$list"])) {
         size_t len = m ? m->length() : sl->length();
         bool empty = m ? m->empty() : sl->empty();
         if (empty) error("argument `$list` of `" + std::string(sig) + "` must not be empty", pstate);
@@ -1264,7 +1270,9 @@ namespace Sass {
         return l;
       }
       else {
-        return l->value_at_index(static_cast<int>(index));
+        Expression* rv = l->value_at_index(static_cast<int>(index));
+        rv->set_delayed(false);
+        return rv;
       }
     }
 
@@ -1335,7 +1343,7 @@ namespace Sass {
     {
       List* l = dynamic_cast<List*>(env["$list"]);
       Expression* v = ARG("$val", Expression);
-      if (Selector_List* sl = dynamic_cast<Selector_List*>(env["$list"])) {
+      if (CommaSequence_Selector* sl = dynamic_cast<CommaSequence_Selector*>(env["$list"])) {
         Listize listize(ctx.mem);
         l = dynamic_cast<List*>(sl->perform(&listize));
       }
@@ -1649,12 +1657,10 @@ namespace Sass {
     {
       Expand expand(ctx, &d_env, backtrace);
       bool is_true = !ARG("$condition", Expression)->perform(&expand.eval)->is_false();
-      if (is_true) {
-        return ARG("$if-true", Expression)->perform(&expand.eval);
-      }
-      else {
-        return ARG("$if-false", Expression)->perform(&expand.eval);
-      }
+      Expression* res = ARG(is_true ? "$if-true" : "$if-false", Expression);
+      res = res->perform(&expand.eval);
+      res->set_delayed(false); // clone?
+      return res;
     }
 
     ////////////////
@@ -1690,7 +1696,6 @@ namespace Sass {
         Sass_Output_Style old_style;
         old_style = ctx.c_options.output_style;
         ctx.c_options.output_style = TO_SASS;
-        Sass_Output_Options out(ctx.c_options);
         Emitter emitter(ctx.c_options);
         Inspect i(emitter);
         i.in_declaration = false;
@@ -1710,7 +1715,7 @@ namespace Sass {
         error("$selectors: At least one selector must be passed", pstate);
 
       // Parse args into vector of selectors
-      std::vector<Selector_List*> parsedSelectors;
+      std::vector<CommaSequence_Selector*> parsedSelectors;
       for (size_t i = 0, L = arglist->length(); i < L; ++i) {
         Expression* exp = dynamic_cast<Expression*>(arglist->value_at_index(i));
         if (exp->concrete_type() == Expression::NULL_VAL) {
@@ -1723,7 +1728,7 @@ namespace Sass {
           str->quote_mark(0);
         }
         std::string exp_src = exp->to_string(ctx.c_options) + "{";
-        Selector_List* sel = Parser::parse_selector(exp_src.c_str(), ctx);
+        CommaSequence_Selector* sel = Parser::parse_selector(exp_src.c_str(), ctx);
         parsedSelectors.push_back(sel);
       }
 
@@ -1733,14 +1738,14 @@ namespace Sass {
       }
 
       // Set the first element as the `result`, keep appending to as we go down the parsedSelector vector.
-      std::vector<Selector_List*>::iterator itr = parsedSelectors.begin();
-      Selector_List* result = *itr;
+      std::vector<CommaSequence_Selector*>::iterator itr = parsedSelectors.begin();
+      CommaSequence_Selector* result = *itr;
       ++itr;
 
       for(;itr != parsedSelectors.end(); ++itr) {
-        Selector_List* child = *itr;
-        std::vector<Complex_Selector*> exploded;
-        Selector_List* rv = child->parentize(result, ctx);
+        CommaSequence_Selector* child = *itr;
+        std::vector<Sequence_Selector*> exploded;
+        CommaSequence_Selector* rv = child->resolve_parent_refs(ctx, result);
         for (size_t m = 0, mLen = rv->length(); m < mLen; ++m) {
           exploded.push_back((*rv)[m]);
         }
@@ -1761,7 +1766,7 @@ namespace Sass {
         error("$selectors: At least one selector must be passed", pstate);
 
       // Parse args into vector of selectors
-      std::vector<Selector_List*> parsedSelectors;
+      std::vector<CommaSequence_Selector*> parsedSelectors;
       for (size_t i = 0, L = arglist->length(); i < L; ++i) {
         Expression* exp = dynamic_cast<Expression*>(arglist->value_at_index(i));
         if (exp->concrete_type() == Expression::NULL_VAL) {
@@ -1774,7 +1779,7 @@ namespace Sass {
           str->quote_mark(0);
         }
         std::string exp_src = exp->to_string() + "{";
-        Selector_List* sel = Parser::parse_selector(exp_src.c_str(), ctx);
+        CommaSequence_Selector* sel = Parser::parse_selector(exp_src.c_str(), ctx);
         parsedSelectors.push_back(sel);
       }
 
@@ -1784,13 +1789,13 @@ namespace Sass {
       }
 
       // Set the first element as the `result`, keep appending to as we go down the parsedSelector vector.
-      std::vector<Selector_List*>::iterator itr = parsedSelectors.begin();
-      Selector_List* result = *itr;
+      std::vector<CommaSequence_Selector*>::iterator itr = parsedSelectors.begin();
+      CommaSequence_Selector* result = *itr;
       ++itr;
 
       for(;itr != parsedSelectors.end(); ++itr) {
-        Selector_List* child = *itr;
-        std::vector<Complex_Selector*> newElements;
+        CommaSequence_Selector* child = *itr;
+        std::vector<Sequence_Selector*> newElements;
 
         // For every COMPLEX_SELECTOR in `result`
         // For every COMPLEX_SELECTOR in `child`
@@ -1801,12 +1806,12 @@ namespace Sass {
         // Replace result->elements with newElements
         for (size_t i = 0, resultLen = result->length(); i < resultLen; ++i) {
           for (size_t j = 0, childLen = child->length(); j < childLen; ++j) {
-            Complex_Selector* parentSeqClone = (*result)[i]->cloneFully(ctx);
-            Complex_Selector* childSeq = (*child)[j];
-            Complex_Selector* base = childSeq->tail();
+            Sequence_Selector* parentSeqClone = (*result)[i]->cloneFully(ctx);
+            Sequence_Selector* childSeq = (*child)[j];
+            Sequence_Selector* base = childSeq->tail();
 
             // Must be a simple sequence
-            if( childSeq->combinator() != Complex_Selector::Combinator::ANCESTOR_OF ) {
+            if( childSeq->combinator() != Sequence_Selector::Combinator::ANCESTOR_OF ) {
               std::string msg("Can't append  `");
               msg += childSeq->to_string();
               msg += "` to `";
@@ -1816,7 +1821,7 @@ namespace Sass {
             }
 
             // Cannot be a Universal selector
-            Type_Selector* pType = dynamic_cast<Type_Selector*>(base->head()->first());
+            Element_Selector* pType = dynamic_cast<Element_Selector*>(childSeq->head()->first());
             if(pType && pType->name() == "*") {
               std::string msg("Can't append  `");
               msg += childSeq->to_string();
@@ -1848,10 +1853,10 @@ namespace Sass {
     Signature selector_unify_sig = "selector-unify($selector1, $selector2)";
     BUILT_IN(selector_unify)
     {
-      Selector_List* selector1 = ARGSEL("$selector1", Selector_List, p_contextualize);
-      Selector_List* selector2 = ARGSEL("$selector2", Selector_List, p_contextualize);
+      CommaSequence_Selector* selector1 = ARGSEL("$selector1", CommaSequence_Selector, p_contextualize);
+      CommaSequence_Selector* selector2 = ARGSEL("$selector2", CommaSequence_Selector, p_contextualize);
 
-      Selector_List* result = selector1->unify_with(selector2, ctx);
+      CommaSequence_Selector* result = selector1->unify_with(selector2, ctx);
       Listize listize(ctx.mem);
       return result->perform(&listize);
     }
@@ -1859,7 +1864,7 @@ namespace Sass {
     Signature simple_selectors_sig = "simple-selectors($selector)";
     BUILT_IN(simple_selectors)
     {
-      Compound_Selector* sel = ARGSEL("$selector", Compound_Selector, p_contextualize);
+      SimpleSequence_Selector* sel = ARGSEL("$selector", SimpleSequence_Selector, p_contextualize);
 
       List* l = SASS_MEMORY_NEW(ctx.mem, List, sel->pstate(), sel->length(), SASS_COMMA);
 
@@ -1876,15 +1881,14 @@ namespace Sass {
     Signature selector_extend_sig = "selector-extend($selector, $extendee, $extender)";
     BUILT_IN(selector_extend)
     {
-      Selector_List*  selector = ARGSEL("$selector", Selector_List, p_contextualize);
-      Selector_List*  extendee = ARGSEL("$extendee", Selector_List, p_contextualize);
-      Selector_List*  extender = ARGSEL("$extender", Selector_List, p_contextualize);
+      CommaSequence_Selector*  selector = ARGSEL("$selector", CommaSequence_Selector, p_contextualize);
+      CommaSequence_Selector*  extendee = ARGSEL("$extendee", CommaSequence_Selector, p_contextualize);
+      CommaSequence_Selector*  extender = ARGSEL("$extender", CommaSequence_Selector, p_contextualize);
 
       ExtensionSubsetMap subset_map;
       extender->populate_extends(extendee, ctx, subset_map);
 
-      bool extendedSomething;
-      Selector_List* result = Extend::extendSelectorList(selector, ctx, subset_map, false, extendedSomething);
+      CommaSequence_Selector* result = Extend::extendSelectorList(selector, ctx, subset_map, false);
 
       Listize listize(ctx.mem);
       return result->perform(&listize);
@@ -1893,15 +1897,14 @@ namespace Sass {
     Signature selector_replace_sig = "selector-replace($selector, $original, $replacement)";
     BUILT_IN(selector_replace)
     {
-      Selector_List*  selector = ARGSEL("$selector", Selector_List, p_contextualize);
-      Selector_List*  original = ARGSEL("$original", Selector_List, p_contextualize);
-      Selector_List*  replacement = ARGSEL("$replacement", Selector_List, p_contextualize);
+      CommaSequence_Selector*  selector = ARGSEL("$selector", CommaSequence_Selector, p_contextualize);
+      CommaSequence_Selector*  original = ARGSEL("$original", CommaSequence_Selector, p_contextualize);
+      CommaSequence_Selector*  replacement = ARGSEL("$replacement", CommaSequence_Selector, p_contextualize);
 
       ExtensionSubsetMap subset_map;
       replacement->populate_extends(original, ctx, subset_map);
 
-      bool extendedSomething;
-      Selector_List* result = Extend::extendSelectorList(selector, ctx, subset_map, true, extendedSomething);
+      CommaSequence_Selector* result = Extend::extendSelectorList(selector, ctx, subset_map, true);
 
       Listize listize(ctx.mem);
       return result->perform(&listize);
@@ -1910,7 +1913,7 @@ namespace Sass {
     Signature selector_parse_sig = "selector-parse($selector)";
     BUILT_IN(selector_parse)
     {
-      Selector_List* sel = ARGSEL("$selector", Selector_List, p_contextualize);
+      CommaSequence_Selector* sel = ARGSEL("$selector", CommaSequence_Selector, p_contextualize);
 
       Listize listize(ctx.mem);
       return sel->perform(&listize);
@@ -1919,8 +1922,8 @@ namespace Sass {
     Signature is_superselector_sig = "is-superselector($super, $sub)";
     BUILT_IN(is_superselector)
     {
-      Selector_List*  sel_sup = ARGSEL("$super", Selector_List, p_contextualize);
-      Selector_List*  sel_sub = ARGSEL("$sub", Selector_List, p_contextualize);
+      CommaSequence_Selector*  sel_sup = ARGSEL("$super", CommaSequence_Selector, p_contextualize);
+      CommaSequence_Selector*  sel_sub = ARGSEL("$sub", CommaSequence_Selector, p_contextualize);
       bool result = sel_sup->is_superselector_of(sel_sub);
       return SASS_MEMORY_NEW(ctx.mem, Boolean, pstate, result);
     }
